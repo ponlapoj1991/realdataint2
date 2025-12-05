@@ -104,6 +104,9 @@ export default () => {
     textColor?: string
     lineColor?: string
     name?: string
+    // Automation Report: Link to Dashboard widget
+    widgetId?: string
+    dashboardId?: string
   }
 
   const createChartElement = (type: ChartType, overrides?: ChartElementOverrides) => {
@@ -122,6 +125,9 @@ export default () => {
       data: overrides?.data || CHART_DEFAULT_DATA[type] || CHART_DEFAULT_DATA.column,
       options: overrides?.options,
       name: overrides?.name,
+      // Automation Report: Link to Dashboard widget for updates
+      widgetId: overrides?.widgetId,
+      dashboardId: overrides?.dashboardId,
     })
   }
   

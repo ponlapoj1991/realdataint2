@@ -78,6 +78,9 @@
       <div class="menu-item insert-dashboard" v-tooltip="'Insert dashboard chart'" @click="requestInsertDashboard">
         <IconChartHistogram class="icon" />
       </div>
+      <div class="menu-item update-charts" v-tooltip="'Update linked charts'" @click="requestUpdateCharts">
+        <IconRefresh class="icon" />
+      </div>
 
     <div class="right">
       <div class="group-menu-item">
@@ -175,6 +178,40 @@ const openAIPPTDialog = () => {
 
 const requestInsertDashboard = () => {
   window.parent?.postMessage({ source: 'pptist', type: 'open-dashboard-insert' }, '*')
+}
+
+// Automation Report: Request update for all linked charts
+const requestUpdateCharts = () => {
+  // Gather all linked charts from all slides
+  const linkedCharts: Array<{ elementId: string; widgetId: string; dashboardId: string }> = []
+
+  slidesStore.slides.forEach(slide => {
+    slide.elements.forEach(element => {
+      if (element.type === 'chart' && element.widgetId && element.dashboardId) {
+        linkedCharts.push({
+          elementId: element.id,
+          widgetId: element.widgetId,
+          dashboardId: element.dashboardId,
+        })
+      }
+    })
+  })
+
+  if (linkedCharts.length === 0) {
+    // No linked charts found
+    window.parent?.postMessage({
+      source: 'pptist',
+      type: 'no-linked-charts'
+    }, '*')
+    return
+  }
+
+  // Request Dashboard to send updated data for these charts
+  window.parent?.postMessage({
+    source: 'pptist',
+    type: 'request-chart-updates',
+    payload: { linkedCharts },
+  }, '*')
 }
 
 const requestHostSave = () => {

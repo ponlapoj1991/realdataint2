@@ -15,6 +15,8 @@ interface DashboardChartMessage {
   }
   meta?: {
     widgetTitle?: string
+    widgetId?: string
+    sourceDashboardId?: string
   }
 }
 
@@ -59,6 +61,9 @@ export default () => {
           textColor: payload.theme?.textColor,
           lineColor: payload.theme?.lineColor,
           name: payload.meta?.widgetTitle,
+          // Automation Report: Store link to Dashboard widget
+          widgetId: payload.meta?.widgetId,
+          dashboardId: payload.meta?.sourceDashboardId,
         })
       }
     }
@@ -83,6 +88,37 @@ export default () => {
       }
       if (payload?.theme) {
         slidesStore.setTheme(payload.theme)
+      }
+    }
+
+    // Automation Report: Handle updated chart data from Dashboard
+    if (event.data?.type === 'update-chart-data') {
+      const payload = event.data?.payload as {
+        elementId: string
+        data: ChartData
+        options?: ChartOptions
+        theme?: { colors?: string[]; textColor?: string; lineColor?: string }
+      } | undefined
+
+      if (payload?.elementId && payload.data) {
+        // Find the chart element and update it
+        const slides = slidesStore.slides.map(slide => ({
+          ...slide,
+          elements: slide.elements.map(el => {
+            if (el.id === payload.elementId && el.type === 'chart') {
+              return {
+                ...el,
+                data: payload.data,
+                options: payload.options || el.options,
+                themeColors: payload.theme?.colors || el.themeColors,
+                textColor: payload.theme?.textColor || el.textColor,
+                lineColor: payload.theme?.lineColor || el.lineColor,
+              }
+            }
+            return el
+          }),
+        }))
+        slidesStore.setSlides(slides)
       }
     }
   }

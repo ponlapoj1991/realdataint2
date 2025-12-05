@@ -473,6 +473,9 @@ export interface PPTChartElement extends PPTBaseElement {
   themeColors: string[]
   textColor?: string
   lineColor?: string
+  // Automation Report: Link to Dashboard widget for updates
+  widgetId?: string
+  dashboardId?: string
 }
 
 
