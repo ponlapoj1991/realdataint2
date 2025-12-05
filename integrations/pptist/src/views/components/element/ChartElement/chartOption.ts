@@ -23,6 +23,15 @@ export interface ChartOptionPayload {
   orientation?: 'vertical' | 'horizontal'
   barWidth?: number
   barCategoryGap?: string
+  // Phase 1: New features
+  yAxisIndexes?: number[]
+  showDataLabels?: boolean
+  dataLabelPosition?: 'top' | 'inside' | 'outside'
+  percentStack?: boolean
+  // Phase 2: Axis & Legend config
+  axisTitle?: { x?: string; yLeft?: string; yRight?: string }
+  axisRange?: { yLeftMin?: number; yLeftMax?: number; yRightMin?: number; yRightMax?: number }
+  legendPosition?: 'top' | 'bottom' | 'left' | 'right'
 }
 
 const buildColoredSeriesData = (values: number[], colors?: string[], fallback?: string[]) => {
@@ -48,6 +57,13 @@ export const getChartOption = ({
   orientation,
   barWidth,
   barCategoryGap,
+  yAxisIndexes,
+  showDataLabels,
+  dataLabelPosition,
+  percentStack,
+  axisTitle,
+  axisRange,
+  legendPosition,
 }: ChartOptionPayload): EChartOption | null => {
   const textStyle = textColor ? {
     color: textColor
@@ -69,8 +85,13 @@ export const getChartOption = ({
     }
   } : {}
 
+  // Build legend with configurable position
+  const legendPos = legendPosition || 'bottom'
+  const legendLayout = legendPos === 'left' || legendPos === 'right'
+    ? { orient: 'vertical' as const, [legendPos]: 10 }
+    : { [legendPos]: legendPos === 'top' ? 10 : 'bottom' }
   const legend = data.series.length > 1 ? {
-    top: 'bottom',
+    ...legendLayout,
     textStyle,
   } : undefined
   const palette = data.seriesColors && data.seriesColors.length ? data.seriesColors : themeColors
@@ -340,35 +361,65 @@ export const getChartOption = ({
         ? seriesTypes
         : data.series.map(() => 'bar')
 
+    // Check if we need dual axis (any series assigned to right axis)
+    const hasDualAxis = yAxisIndexes && yAxisIndexes.some(idx => idx === 1)
+
+    // Build yAxis array for dual axis support
+    const yAxisConfig = hasDualAxis ? [
+      {
+        type: 'value' as const,
+        name: axisTitle?.yLeft,
+        axisLine,
+        axisLabel,
+        splitLine,
+        min: axisRange?.yLeftMin,
+        max: axisRange?.yLeftMax,
+      },
+      {
+        type: 'value' as const,
+        name: axisTitle?.yRight,
+        axisLine,
+        axisLabel,
+        splitLine: { show: false },
+        min: axisRange?.yRightMin,
+        max: axisRange?.yRightMax,
+      }
+    ] : {
+      type: 'value' as const,
+      name: axisTitle?.yLeft,
+      axisLine,
+      axisLabel,
+      splitLine,
+    }
+
     return {
       color: palette,
       textStyle,
-      legend: {
-        top: 'bottom',
-        textStyle,
-      },
+      legend,
       xAxis: {
         type: 'category',
+        name: axisTitle?.x,
         data: data.labels,
         axisLine,
         axisLabel,
       },
-      yAxis: {
-        type: 'value',
-        axisLine,
-        axisLabel,
-        splitLine,
-      },
+      yAxis: yAxisConfig,
       series: data.series.map((item, index) => {
         const seriesType = resolvedSeriesTypes[index] || 'bar'
+        const yAxisIndex = yAxisIndexes?.[index] ?? 0
+        // Map our position types to ECharts valid positions
+        const resolvedLabelPos = dataLabelPosition === 'outside' ? 'top' : (dataLabelPosition || 'top')
+
         if (seriesType === 'line' || seriesType === 'area') {
           const lineSeries: LineSeriesOption = {
             data: item,
             name: data.legends[index],
             type: 'line',
             smooth: lineSmooth,
+            yAxisIndex: hasDualAxis ? yAxisIndex : undefined,
             label: {
-              show: true,
+              show: showDataLabels !== false,
+              position: resolvedLabelPos as 'top' | 'inside',
             },
           }
           if (seriesType === 'area') {
@@ -380,14 +431,16 @@ export const getChartOption = ({
           data: item,
           name: data.legends[index],
           type: 'bar',
+          yAxisIndex: hasDualAxis ? yAxisIndex : undefined,
           label: {
-            show: true,
+            show: showDataLabels !== false,
+            position: resolvedLabelPos === 'inside' ? 'inside' : 'top',
           },
           itemStyle: {
             borderRadius: [2, 2, 0, 0],
           },
         }
-        if (stack) barSeries.stack = 'A'
+        if (stack || percentStack) barSeries.stack = 'A'
         return barSeries
       }),
     }

@@ -60,6 +60,15 @@ const updateOption = () => {
     stack: props.options?.stack || false,
     seriesTypes: props.options?.seriesTypes,
     pointSizes: props.options?.pointSizes,
+    // Phase 1: New features
+    yAxisIndexes: props.options?.yAxisIndexes,
+    showDataLabels: props.options?.showDataLabels,
+    dataLabelPosition: props.options?.dataLabelPosition,
+    percentStack: props.options?.percentStack,
+    // Phase 2: Axis & Legend config
+    axisTitle: props.options?.axisTitle,
+    axisRange: props.options?.axisRange,
+    legendPosition: props.options?.legendPosition,
   })
   if (option) chart!.setOption(option, true)
 }

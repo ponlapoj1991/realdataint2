@@ -24,6 +24,15 @@ export interface DashboardChartInsertPayload {
     orientation?: Orientation;
     barWidth?: number;
     barCategoryGap?: string;
+    // Phase 1: New features for Dashboard-PPTist sync
+    yAxisIndexes?: number[];
+    showDataLabels?: boolean;
+    dataLabelPosition?: 'top' | 'inside' | 'outside';
+    percentStack?: boolean;
+    // Phase 2: Axis & Legend config
+    axisTitle?: { x?: string; yLeft?: string; yRight?: string };
+    axisRange?: { yLeftMin?: number; yLeftMax?: number; yRightMin?: number; yRightMax?: number };
+    legendPosition?: 'top' | 'bottom' | 'left' | 'right';
   };
   theme: {
     colors: string[];
@@ -117,7 +126,9 @@ const buildComboSeries = (widget: DashboardWidget, rows: any[], theme: ChartThem
   const colors = widget.series.map((series, idx) => series.color || palette[idx % palette.length]);
   const seriesData = widget.series.map(series => rows.map(row => Number(row[series.id]) || 0));
   const seriesTypes = widget.series.map(series => series.type) as SeriesVisualType[];
-  return { labels, legends, series: seriesData, colors, seriesTypes };
+  // Phase 1: Build yAxisIndexes for dual axis support (0 = left, 1 = right)
+  const yAxisIndexes = widget.series.map(series => series.yAxis === 'right' ? 1 : 0);
+  return { labels, legends, series: seriesData, colors, seriesTypes, yAxisIndexes };
 };
 
 export const buildDashboardChartPayload = (
@@ -141,6 +152,20 @@ export const buildDashboardChartPayload = (
     if (!multiSeriesData.length) return null;
     const combo = buildComboSeries(widget, multiSeriesData, theme);
     if (!combo) return null;
+
+    // Phase 1: Build axis config from widget
+    const axisTitle = {
+      x: widget.xAxis?.title,
+      yLeft: widget.leftYAxis?.title,
+      yRight: widget.rightYAxis?.title,
+    };
+    const axisRange = {
+      yLeftMin: typeof widget.leftYAxis?.min === 'number' ? widget.leftYAxis.min : undefined,
+      yLeftMax: typeof widget.leftYAxis?.max === 'number' ? widget.leftYAxis.max : undefined,
+      yRightMin: typeof widget.rightYAxis?.min === 'number' ? widget.rightYAxis.min : undefined,
+      yRightMax: typeof widget.rightYAxis?.max === 'number' ? widget.rightYAxis.max : undefined,
+    };
+
     return {
       chartType: 'combo',
       data: {
@@ -153,6 +178,15 @@ export const buildDashboardChartPayload = (
         seriesTypes: combo.seriesTypes,
         lineSmooth: widget.curveType === 'monotone' || widget.type === 'smooth-line',
         stack: widget.barMode === 'stacked' || widget.barMode === 'percent',
+        // Phase 1: Dual Axis support
+        yAxisIndexes: combo.yAxisIndexes,
+        // Phase 1: Data Labels
+        showDataLabels: widget.dataLabels?.enabled,
+        dataLabelPosition: widget.dataLabels?.position as 'top' | 'inside' | 'outside' | undefined,
+        // Phase 2: Axis config
+        axisTitle,
+        axisRange,
+        legendPosition: widget.legend?.position,
       },
       theme: {
         colors: combo.colors || getPalette(widget, theme),
@@ -219,6 +253,15 @@ export const buildDashboardChartPayload = (
   const barWidth = clampBarSize(widget.barSize);
   const barCategoryGap = toCategoryGap(widget.categoryGap);
 
+  // Phase 1: Check if this is a 100% stacked chart
+  const isPercentStack = ['100-stacked-column', '100-stacked-bar', '100-stacked-area'].includes(widget.type);
+
+  // Phase 2: Build axis config
+  const axisTitle = {
+    x: widget.xAxis?.title,
+    yLeft: widget.leftYAxis?.title,
+  };
+
   return {
     chartType,
     data: { labels, legends, series, seriesColors, dataColors },
@@ -228,7 +271,14 @@ export const buildDashboardChartPayload = (
       pointSizes,
       orientation,
       barWidth,
-      barCategoryGap
+      barCategoryGap,
+      // Phase 1: Data Labels & 100% Stacked
+      showDataLabels: widget.dataLabels?.enabled,
+      dataLabelPosition: widget.dataLabels?.position as 'top' | 'inside' | 'outside' | undefined,
+      percentStack: isPercentStack,
+      // Phase 2: Axis & Legend config
+      axisTitle,
+      legendPosition: widget.legend?.position,
     },
     theme: {
       colors: palette,
