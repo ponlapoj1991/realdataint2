@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "postinstall": "npm --prefix integrations/pptist install --ignore-scripts",
     "build:pptist": "npm --prefix integrations/pptist run build && node scripts/sync-pptist-assets.mjs",
     "build": "npm run build:pptist && vite build",
     "preview": "vite preview",
