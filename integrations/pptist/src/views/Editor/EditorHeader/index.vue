@@ -1,4 +1,4 @@
-﻿<template>
+<template>
   <div class="editor-header">
     <div class="left">
       <Popover trigger="click" placement="bottom-start" v-model:value="mainMenuVisible">
@@ -8,13 +8,13 @@
               <div class="icon"><IconClick theme="two-tone" :fill="['#ffc158', '#fff']" /></div>
               <div class="aippt-content">
                 <div class="aippt"><span>AIPPT</span></div>
-                <div class="aippt-subtitle">่พ“ๅ…ฅไธ€ๅฅ่ฏ๏ผๆบ่ฝ็”ๆๆผ”็คบๆ–็จฟ</div>
+                <div class="aippt-subtitle">Enter a sentence to generate presentation</div>
               </div>
             </div>
           </div>
           <Divider :margin="10" />
           <div class="import-section">
-            <div class="import-label">ๅฏผๅ…ฅๆ–ไปถ</div>
+            <div class="import-label">Import File</div>
             <div class="import-grid">
               <FileInput class="import-block" accept="application/vnd.openxmlformats-officedocument.presentationml.presentation" @change="files => {
                 importPPTXFile(files)
@@ -22,7 +22,7 @@
               }">
                 <span class="icon"><IconFilePdf theme="multi-color" :fill="['#333', '#d14424', '#fff']" /></span>
                 <span class="label">PPTX</span>
-                <span class="sub-label">๏ผไป…ไพๆต่ฏ•๏ผ</span>
+                <span class="sub-label">(Beta)</span>
               </FileInput>
               <FileInput class="import-block" accept=".json" @change="files => {
                 importJSON(files)
@@ -30,7 +30,7 @@
               }">
                 <span class="icon"><IconFileJpg theme="multi-color" :fill="['#333', '#d14424', '#fff']" /></span>
                 <span class="label">JSON</span>
-                <span class="sub-label">๏ผไป…ไพๆต่ฏ•๏ผ</span>
+                <span class="sub-label">(Beta)</span>
               </FileInput>
               <FileInput class="import-block" accept=".pptist" @change="files => {
                 importSpecificFile(files)
@@ -38,35 +38,35 @@
               }">
                 <span class="icon"><IconNotes theme="multi-color" :fill="['#333', '#d14424', '#fff']" /></span>
                 <span class="label">PPTIST</span>
-                <span class="sub-label">๏ผไธ“ๅฑๆ ผๅผ๏ผ</span>
+                <span class="sub-label">(Native)</span>
               </FileInput>
             </div>
           </div>
           <Divider :margin="10" />
-          <PopoverMenuItem class="popover-menu-item" @click="setDialogForExport('pptx')"><IconDownload class="icon" /> ๅฏผๅบๆ–ไปถ</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="setDialogForExport('pptx')"><IconDownload class="icon" /> Export File</PopoverMenuItem>
           <Divider :margin="10" />
           <PopoverMenuItem class="popover-menu-item" @click="requestHostSave()"><IconWrite class="icon" /> Save</PopoverMenuItem>
           <Divider :margin="10" />
-          <PopoverMenuItem class="popover-menu-item" @click="resetSlides(); mainMenuVisible = false"><IconRefresh class="icon" /> ้็ฝฎๅนป็ฏ็</PopoverMenuItem>
-          <PopoverMenuItem class="popover-menu-item" @click="openMarkupPanel(); mainMenuVisible = false"><IconMark class="icon" /> ๅนป็ฏ็็ฑปๅๆ ๆณจ</PopoverMenuItem>
-          <PopoverMenuItem class="popover-menu-item" @click="mainMenuVisible = false; hotkeyDrawerVisible = true"><IconCommand class="icon" /> ๅฟซๆทๆ“ไฝ</PopoverMenuItem>
-          <PopoverMenuItem class="popover-menu-item" @click="goLink('https://github.com/pipipi-pikachu/PPTist/issues')"><IconComment class="icon" /> ๆ่งๅ้ฆ</PopoverMenuItem>
-          <PopoverMenuItem class="popover-menu-item" @click="goLink('https://github.com/pipipi-pikachu/PPTist/blob/master/doc/Q&A.md')"><IconHelpcenter class="icon" /> ๅธธ่ง้—ฎ้ข</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="resetSlides(); mainMenuVisible = false"><IconRefresh class="icon" /> Reset Slides</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="openMarkupPanel(); mainMenuVisible = false"><IconMark class="icon" /> Slide Annotations</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="mainMenuVisible = false; hotkeyDrawerVisible = true"><IconCommand class="icon" /> Keyboard Shortcuts</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="goLink('https://github.com/pipipi-pikachu/PPTist/issues')"><IconComment class="icon" /> Feedback</PopoverMenuItem>
+          <PopoverMenuItem class="popover-menu-item" @click="goLink('https://github.com/pipipi-pikachu/PPTist/blob/master/doc/Q&A.md')"><IconHelpcenter class="icon" /> FAQ</PopoverMenuItem>
           <Divider :margin="10" />
-          <div class="statement">ๆณจ๏ผๆฌ็ซไป…ไฝๆต่ฏ•/ๆผ”็คบ๏ผไธๆไพไปปไฝ•ๅฝขๅผ็ๆๅก</div>
+          <div class="statement">Note: This is for testing/demo purposes only.</div>
         </template>
         <div class="menu-item"><IconHamburgerButton class="icon" /></div>
       </Popover>
 
       <div class="title">
-        <Input 
-          class="title-input" 
+        <Input
+          class="title-input"
           ref="titleInputRef"
-          v-model:value="titleValue" 
-          @blur="handleUpdateTitle()" 
-          v-if="editingTitle" 
+          v-model:value="titleValue"
+          @blur="handleUpdateTitle()"
+          v-if="editingTitle"
         ></Input>
-        <div 
+        <div
           class="title-text"
           @click="startEditTitle()"
           :title="title"
@@ -75,27 +75,42 @@
       </div>
     </div>
 
-      <div class="menu-item insert-dashboard" v-tooltip="'Insert dashboard chart'" @click="requestInsertDashboard">
-        <IconChartHistogram class="icon" />
-      </div>
-
     <div class="right">
+      <!-- Dashboard Chart Menu with Dropdown -->
       <div class="group-menu-item">
-        <div class="menu-item" v-tooltip="'ๅนป็ฏ็ๆ”พๆ ๏ผF5๏ผ'" @click="enterScreening()">
-          <IconPpt class="icon" />
+        <div class="menu-item" v-tooltip="'Dashboard Charts'" @click="requestInsertDashboard">
+          <IconChartHistogram class="icon" />
         </div>
-        <Popover trigger="click" center>
+        <Popover trigger="click" center v-model:value="dashboardMenuVisible">
           <template #content>
-            <PopoverMenuItem class="popover-menu-item" @click="enterScreeningFromStart()"><IconSlideTwo class="icon" /> ไปๅคดๅผ€ๅง</PopoverMenuItem>
-            <PopoverMenuItem class="popover-menu-item" @click="enterScreening()"><IconPpt class="icon" /> ไปๅฝ“ๅ้กตๅผ€ๅง</PopoverMenuItem>
+            <PopoverMenuItem class="popover-menu-item" @click="requestInsertDashboard(); dashboardMenuVisible = false">
+              <IconChartHistogram class="icon" /> Select Dashboard
+            </PopoverMenuItem>
+            <PopoverMenuItem class="popover-menu-item" @click="requestUpdateCharts(); dashboardMenuVisible = false">
+              <IconRefresh class="icon" /> Update Linked Charts
+            </PopoverMenuItem>
           </template>
           <div class="arrow-btn"><IconDown class="arrow" /></div>
         </Popover>
       </div>
-      <div class="menu-item" v-tooltip="'AI็”ๆPPT'" @click="openAIPPTDialog(); mainMenuVisible = false">
+
+      <!-- Slideshow Menu -->
+      <div class="group-menu-item">
+        <div class="menu-item" v-tooltip="'Start Slideshow (F5)'" @click="enterScreening()">
+          <IconPpt class="icon" />
+        </div>
+        <Popover trigger="click" center>
+          <template #content>
+            <PopoverMenuItem class="popover-menu-item" @click="enterScreeningFromStart()"><IconSlideTwo class="icon" /> From Beginning</PopoverMenuItem>
+            <PopoverMenuItem class="popover-menu-item" @click="enterScreening()"><IconPpt class="icon" /> From Current Slide</PopoverMenuItem>
+          </template>
+          <div class="arrow-btn"><IconDown class="arrow" /></div>
+        </Popover>
+      </div>
+      <div class="menu-item" v-tooltip="'AI Generate PPT'" @click="openAIPPTDialog(); mainMenuVisible = false">
         <span class="text ai">AI</span>
       </div>
-      <div class="menu-item" v-tooltip="'ๅฏผๅบ'" @click="setDialogForExport('pptx')">
+      <div class="menu-item" v-tooltip="'Export'" @click="setDialogForExport('pptx')">
         <IconDownload class="icon" />
       </div>
     </div>
@@ -106,10 +121,10 @@
       placement="right"
     >
       <HotkeyDoc />
-      <template v-slot:title>ๅฟซๆทๆ“ไฝ</template>
+      <template v-slot:title>Keyboard Shortcuts</template>
     </Drawer>
 
-    <FullscreenSpin :loading="exporting" tip="ๆญฃๅจๅฏผๅ…ฅ..." />
+    <FullscreenSpin :loading="exporting" tip="Importing..." />
   </div>
 </template>
 
@@ -139,6 +154,7 @@ const { importSpecificFile, importPPTXFile, importJSON, exporting } = useImport(
 const { resetSlides } = useSlideHandler()
 
 const mainMenuVisible = ref(false)
+const dashboardMenuVisible = ref(false)
 const hotkeyDrawerVisible = ref(false)
 const editingTitle = ref(false)
 const titleValue = ref('')
@@ -175,6 +191,40 @@ const openAIPPTDialog = () => {
 
 const requestInsertDashboard = () => {
   window.parent?.postMessage({ source: 'pptist', type: 'open-dashboard-insert' }, '*')
+}
+
+// Automation Report: Request update for all linked charts
+const requestUpdateCharts = () => {
+  // Gather all linked charts from all slides
+  const linkedCharts: Array<{ elementId: string; widgetId: string; dashboardId: string }> = []
+
+  slidesStore.slides.forEach(slide => {
+    slide.elements.forEach(element => {
+      if (element.type === 'chart' && element.widgetId && element.dashboardId) {
+        linkedCharts.push({
+          elementId: element.id,
+          widgetId: element.widgetId,
+          dashboardId: element.dashboardId,
+        })
+      }
+    })
+  })
+
+  if (linkedCharts.length === 0) {
+    // No linked charts found
+    window.parent?.postMessage({
+      source: 'pptist',
+      type: 'no-linked-charts'
+    }, '*')
+    return
+  }
+
+  // Request Dashboard to send updated data for these charts
+  window.parent?.postMessage({
+    source: 'pptist',
+    type: 'request-chart-updates',
+    payload: { linkedCharts },
+  }, '*')
 }
 
 const requestHostSave = () => {
@@ -303,7 +353,7 @@ const requestHostSave = () => {
     border: 1px solid $borderColor;
     transition: background-color .2s;
     cursor: pointer;
-  
+
     &:hover {
       background-color: #f1f1f1;
     }
@@ -379,12 +429,3 @@ const requestHostSave = () => {
   height: 30px;
 }
 </style>
-
-
-
-
-
-
-
-
-

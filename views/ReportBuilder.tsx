@@ -260,8 +260,67 @@ const ReportBuilder: React.FC<ReportBuilderProps> = ({ project, onUpdateProject 
         }
         persistSlidesFromExport(payload.slides, pendingSaveIntent === 'close');
       }
+
+      // Automation Report: Handle update request for linked charts
+      if (event.data.type === 'request-chart-updates') {
+        const linkedCharts = event.data.payload?.linkedCharts as Array<{
+          elementId: string;
+          widgetId: string;
+          dashboardId: string;
+        }> | undefined;
+
+        if (!linkedCharts || linkedCharts.length === 0) {
+          showToast('No linked charts', 'No charts are linked to Dashboard widgets.', 'info');
+          return;
+        }
+
+        let updatedCount = 0;
+        linkedCharts.forEach((linked) => {
+          // Find the dashboard and widget
+          const dashboard = dashboardsForInsert.find((d) => d.id === linked.dashboardId);
+          if (!dashboard) return;
+
+          const widget = dashboard.widgets?.find((w) => w.id === linked.widgetId);
+          if (!widget) return;
+
+          // Build fresh payload for this widget
+          const payload = buildDashboardChartPayload(widget, finalData, {
+            theme: CLASSIC_ANALYTICS_THEME,
+            sourceDashboardId: dashboard.id,
+          });
+
+          if (!payload) return;
+
+          // Send update to PPTist
+          iframeWindow?.postMessage(
+            {
+              source: 'realdata-host',
+              type: 'update-chart-data',
+              payload: {
+                elementId: linked.elementId,
+                data: payload.data,
+                options: payload.options,
+                theme: payload.theme,
+              },
+            },
+            '*'
+          );
+          updatedCount++;
+        });
+
+        if (updatedCount > 0) {
+          showToast('Charts updated', `${updatedCount} chart(s) refreshed with latest data.`, 'success');
+        } else {
+          showToast('No updates', 'Could not find matching widgets for linked charts.', 'warning');
+        }
+      }
+
+      // Automation Report: No linked charts message
+      if (event.data.type === 'no-linked-charts') {
+        showToast('No linked charts', 'Insert charts from Dashboard first to enable updates.', 'info');
+      }
     },
-    [dashboardsForInsert.length, pendingSaveIntent, persistSlidesFromExport, requestPresentationExport, showToast]
+    [dashboardsForInsert, finalData, iframeWindow, pendingSaveIntent, persistSlidesFromExport, requestPresentationExport, showToast]
   );
 
   useEffect(() => {

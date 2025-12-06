@@ -1,23 +1,35 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Plus, 
-  FolderOpen, 
-  Clock, 
-  Trash2, 
-  Search, 
-  LayoutGrid, 
-  PieChart, 
-  Settings, 
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import {
+  Plus,
+  FolderOpen,
+  Clock,
+  Trash2,
+  Search,
+  LayoutGrid,
+  PieChart,
+  Settings,
   Database,
   Loader2,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Download,
+  Upload,
+  X,
+  CheckCircle,
+  AlertCircle
 } from 'lucide-react';
 import { Project } from '../types';
 import { getProjects, deleteProject, saveProject } from '../utils/storage-compat';
 import Skeleton from '../components/Skeleton';
 import EmptyState from '../components/EmptyState';
+import {
+  exportProject,
+  importProject,
+  validateBackupFile,
+  type ExportProgress,
+  type ImportProgress
+} from '../utils/projectBackup';
 
 interface LandingProps {
   onSelectProject: (project: Project) => void;
@@ -31,6 +43,15 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [activeMenu, setActiveMenu] = useState('overview');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Export/Import state
+  const [exportingProjectId, setExportingProjectId] = useState<string | null>(null);
+  const [exportProgress, setExportProgress] = useState<ExportProgress | null>(null);
+  const [isImporting, setIsImporting] = useState(false);
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null);
+  const [importError, setImportError] = useState<string | null>(null);
+  const [importSuccess, setImportSuccess] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Load projects asynchronously
   const loadProjects = async () => {
@@ -83,11 +104,99 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation(); // Prevent card click
     e.preventDefault(); // Prevent any default behavior
-    
+
     if (window.confirm('Are you sure you want to delete this project? This action cannot be undone.')) {
       await deleteProject(id);
       await loadProjects();
     }
+  };
+
+  // Export project to .zip file
+  const handleExport = async (e: React.MouseEvent, projectId: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+
+    setExportingProjectId(projectId);
+    setExportProgress({ phase: 'preparing', percent: 0, message: 'Preparing export...' });
+
+    try {
+      await exportProject(projectId, (progress) => {
+        setExportProgress(progress);
+      });
+
+      // Show success briefly before closing
+      setTimeout(() => {
+        setExportingProjectId(null);
+        setExportProgress(null);
+      }, 1500);
+    } catch (error) {
+      console.error('Export failed:', error);
+      alert(`Export failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      setExportingProjectId(null);
+      setExportProgress(null);
+    }
+  };
+
+  // Handle file selection for import
+  const handleImportClick = () => {
+    fileInputRef.current?.click();
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Reset file input for next selection
+    e.target.value = '';
+
+    setIsImporting(true);
+    setImportError(null);
+    setImportSuccess(false);
+    setImportProgress({ phase: 'reading', percent: 0, message: 'Reading backup file...' });
+
+    try {
+      // Validate file first
+      const validation = await validateBackupFile(file);
+      if (!validation.valid) {
+        throw new Error(validation.error || 'Invalid backup file');
+      }
+
+      // Show validation info
+      setImportProgress({
+        phase: 'validating',
+        percent: 15,
+        message: `Found: ${validation.manifest?.projectName} (${validation.manifest?.rowCount} rows)`
+      });
+
+      // Proceed with import
+      await importProject(file, {}, (progress) => {
+        setImportProgress(progress);
+      });
+
+      setImportSuccess(true);
+      setImportProgress({ phase: 'done', percent: 100, message: 'Import complete!' });
+
+      // Reload projects list
+      await loadProjects();
+
+      // Close modal after delay
+      setTimeout(() => {
+        setIsImporting(false);
+        setImportProgress(null);
+        setImportSuccess(false);
+      }, 2000);
+    } catch (error) {
+      console.error('Import failed:', error);
+      setImportError(error instanceof Error ? error.message : 'Unknown error occurred');
+      setImportProgress(null);
+    }
+  };
+
+  const closeImportModal = () => {
+    setIsImporting(false);
+    setImportProgress(null);
+    setImportError(null);
+    setImportSuccess(false);
   };
 
   return (
@@ -157,19 +266,37 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
       >
         <div className="max-w-7xl mx-auto">
           
+          {/* Hidden file input for import */}
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileSelect}
+            accept=".zip"
+            className="hidden"
+          />
+
           {/* Header Section */}
           <div className="flex justify-between items-end mb-10">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 tracking-tight">Dashboard</h1>
               <p className="text-gray-500 mt-2">Welcome back. Here's what's happening with your data today.</p>
             </div>
-            <button
-              onClick={() => setIsCreating(true)}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 shadow-sm transition-all transform hover:scale-105 active:scale-95"
-            >
-              <Plus className="w-5 h-5" />
-              <span>Create Project</span>
-            </button>
+            <div className="flex items-center space-x-3">
+              <button
+                onClick={handleImportClick}
+                className="bg-white hover:bg-gray-50 text-gray-700 px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 border border-gray-300 shadow-sm transition-all transform hover:scale-105 active:scale-95"
+              >
+                <Upload className="w-5 h-5" />
+                <span>Import Backup</span>
+              </button>
+              <button
+                onClick={() => setIsCreating(true)}
+                className="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-lg font-medium flex items-center space-x-2 shadow-sm transition-all transform hover:scale-105 active:scale-95"
+              >
+                <Plus className="w-5 h-5" />
+                <span>Create Project</span>
+              </button>
+            </div>
           </div>
 
           {/* Stats Grid */}
@@ -263,8 +390,20 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
                     onClick={() => onSelectProject(project)}
                     className="group bg-white rounded-xl border border-gray-200 p-6 cursor-pointer transition-all hover:shadow-lg hover:border-blue-200 relative overflow-hidden"
                 >
-                    {/* Updated Delete Button: Higher Z-index, Better Visibility logic */}
-                    <div className="absolute top-2 right-2 z-20 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-200">
+                    {/* Action Buttons: Export and Delete */}
+                    <div className="absolute top-2 right-2 z-20 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-all duration-200 flex items-center space-x-1">
+                        <button
+                            onClick={(e) => handleExport(e, project.id)}
+                            disabled={exportingProjectId === project.id}
+                            className="bg-white/90 backdrop-blur-sm p-2 rounded-full text-gray-400 hover:text-blue-600 hover:bg-blue-50 border border-gray-200 shadow-sm transition-all transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Export Project"
+                        >
+                            {exportingProjectId === project.id ? (
+                                <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                                <Download className="w-4 h-4" />
+                            )}
+                        </button>
                         <button
                             onClick={(e) => handleDelete(e, project.id)}
                             className="bg-white/90 backdrop-blur-sm p-2 rounded-full text-gray-400 hover:text-red-600 hover:bg-red-50 border border-gray-200 shadow-sm transition-all transform hover:scale-105"
@@ -307,7 +446,7 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
               <div className="bg-white w-full max-w-lg rounded-xl shadow-xl border border-gray-100 p-6 animate-in fade-in zoom-in duration-200">
                 <h3 className="text-xl font-bold mb-1 text-gray-900">Create New Project</h3>
                 <p className="text-gray-500 text-sm mb-6">Setup a new workspace for data analysis.</p>
-                
+
                 <form onSubmit={handleCreate} className="space-y-4">
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-1.5">Project Name</label>
@@ -345,6 +484,99 @@ const Landing: React.FC<LandingProps> = ({ onSelectProject }) => {
                     </button>
                   </div>
                 </form>
+              </div>
+            </div>
+          )}
+
+          {/* Import Progress Modal */}
+          {isImporting && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-gray-100 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-xl font-bold text-gray-900">
+                    {importError ? 'Import Failed' : importSuccess ? 'Import Complete' : 'Importing Project'}
+                  </h3>
+                  {(importError || importSuccess) && (
+                    <button
+                      onClick={closeImportModal}
+                      className="text-gray-400 hover:text-gray-600 transition-colors"
+                    >
+                      <X className="w-5 h-5" />
+                    </button>
+                  )}
+                </div>
+
+                {importError ? (
+                  <div className="flex items-start space-x-3 p-4 bg-red-50 rounded-lg border border-red-100">
+                    <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-sm font-medium text-red-800">Error importing backup</p>
+                      <p className="text-sm text-red-600 mt-1">{importError}</p>
+                    </div>
+                  </div>
+                ) : importSuccess ? (
+                  <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg border border-green-100">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <p className="text-sm font-medium text-green-800">Project imported successfully!</p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                      <p className="text-sm text-gray-600">{importProgress?.message || 'Processing...'}</p>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${importProgress?.percent || 0}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2 text-right">{importProgress?.percent || 0}%</p>
+                  </div>
+                )}
+
+                {importError && (
+                  <div className="flex justify-end mt-4">
+                    <button
+                      onClick={closeImportModal}
+                      className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium transition-colors"
+                    >
+                      Close
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Export Progress Modal */}
+          {exportingProjectId && exportProgress && (
+            <div className="fixed inset-0 bg-black/30 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-white w-full max-w-md rounded-xl shadow-xl border border-gray-100 p-6">
+                <h3 className="text-xl font-bold text-gray-900 mb-4">
+                  {exportProgress.phase === 'done' ? 'Export Complete' : 'Exporting Project'}
+                </h3>
+
+                {exportProgress.phase === 'done' ? (
+                  <div className="flex items-center space-x-3 p-4 bg-green-50 rounded-lg border border-green-100">
+                    <CheckCircle className="w-5 h-5 text-green-500" />
+                    <p className="text-sm font-medium text-green-800">Your backup file is downloading...</p>
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center space-x-3 mb-4">
+                      <Loader2 className="w-5 h-5 text-blue-600 animate-spin" />
+                      <p className="text-sm text-gray-600">{exportProgress.message}</p>
+                    </div>
+                    <div className="w-full bg-gray-100 rounded-full h-2">
+                      <div
+                        className="bg-blue-600 h-2 rounded-full transition-all duration-300"
+                        style={{ width: `${exportProgress.percent}%` }}
+                      />
+                    </div>
+                    <p className="text-xs text-gray-400 mt-2 text-right">{exportProgress.percent}%</p>
+                  </div>
+                )}
               </div>
             </div>
           )}

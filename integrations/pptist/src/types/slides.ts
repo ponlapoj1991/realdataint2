@@ -421,6 +421,17 @@ export interface ChartOptions {
   orientation?: 'vertical' | 'horizontal'
   barWidth?: number
   barCategoryGap?: string
+  // Phase 1: Dual Axis support
+  yAxisIndexes?: number[]
+  // Phase 1: Data Labels support
+  showDataLabels?: boolean
+  dataLabelPosition?: 'top' | 'inside' | 'outside'
+  // Phase 1: 100% Stacked support
+  percentStack?: boolean
+  // Phase 2: Axis config
+  axisTitle?: { x?: string; yLeft?: string; yRight?: string }
+  axisRange?: { yLeftMin?: number; yLeftMax?: number; yRightMin?: number; yRightMax?: number }
+  legendPosition?: 'top' | 'bottom' | 'left' | 'right'
 }
 
 export interface ChartData {
@@ -462,6 +473,9 @@ export interface PPTChartElement extends PPTBaseElement {
   themeColors: string[]
   textColor?: string
   lineColor?: string
+  // Automation Report: Link to Dashboard widget for updates
+  widgetId?: string
+  dashboardId?: string
 }
 
 

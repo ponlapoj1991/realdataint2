@@ -2,13 +2,13 @@
  * React Hook: useExcelWorker
  *
  * Purpose: Manage Excel parsing via Web Worker
- * - Non-blocking UI
+ * - Non-blocking UI (animation keeps spinning)
  * - Progress tracking
  * - Error handling
  * - Automatic cleanup
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { RawRow } from '../types';
 
 interface UseExcelWorkerResult {
@@ -19,17 +19,16 @@ interface UseExcelWorkerResult {
   cancel: () => void;
 }
 
-interface ChunkMessage {
-  type: 'chunk';
-  data: RawRow[];
-  progress: number;
-  chunkIndex: number;
+interface ProgressMessage {
+  type: 'progress';
+  percent: number;
+  message: string;
 }
 
 interface CompleteMessage {
   type: 'complete';
+  data: RawRow[];
   totalRows: number;
-  totalChunks: number;
 }
 
 interface ErrorMessage {
@@ -37,15 +36,27 @@ interface ErrorMessage {
   error: string;
 }
 
-type WorkerResponse = ChunkMessage | CompleteMessage | ErrorMessage;
+type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
 
 export const useExcelWorker = (): UseExcelWorkerResult => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  const workerRef = useRef<Worker | null>(null);
+  const isCancelledRef = useRef(false);
+
+  // Cleanup worker on unmount
+  useEffect(() => {
+    return () => {
+      if (workerRef.current) {
+        workerRef.current.terminate();
+        workerRef.current = null;
+      }
+    };
+  }, []);
 
   /**
-   * Parse Excel/CSV file (using main thread with chunking to prevent blocking)
+   * Parse Excel/CSV file using Web Worker
    */
   const parseFile = useCallback((file: File): Promise<RawRow[]> => {
     return new Promise((resolve, reject) => {
@@ -53,49 +64,96 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
       setIsProcessing(true);
       setProgress(0);
       setError(null);
+      isCancelledRef.current = false;
 
-      const reader = new FileReader();
+      // Terminate any existing worker
+      if (workerRef.current) {
+        workerRef.current.terminate();
+      }
 
-      reader.onload = async (e) => {
-        try {
-          const data = e.target?.result;
-          if (!data) {
-            throw new Error('Failed to read file');
-          }
-
-          // Check if XLSX is available
-          if (!window.XLSX) {
-            throw new Error('XLSX library not loaded');
-          }
-
-          // Parse workbook
-          const workbook = window.XLSX.read(data, {
-            type: file.name.toLowerCase().endsWith('.csv') ? 'string' : 'binary'
+      // Create new worker
+      try {
+        // Use URL constructor for Vite compatibility
+        workerRef.current = new Worker(
+          new URL('../workers/excel.worker.ts', import.meta.url),
+          { type: 'classic' }
+        );
+      } catch (workerError) {
+        console.warn('[useExcelWorker] Worker creation failed, falling back to main thread:', workerError);
+        // Fallback to main thread processing
+        fallbackParse(file)
+          .then((data) => {
+            setIsProcessing(false);
+            resolve(data);
+          })
+          .catch((err) => {
+            setIsProcessing(false);
+            reject(err);
           });
+        return;
+      }
 
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
+      const worker = workerRef.current;
 
-          // Parse to JSON with progress simulation
-          setProgress(50);
+      // Handle messages from worker
+      worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+        if (isCancelledRef.current) return;
 
-          // Use setTimeout to yield to UI
-          setTimeout(() => {
-            const json = window.XLSX.utils.sheet_to_json(worksheet, {
-              raw: false,
-              defval: ''
-            }) as RawRow[];
+        const message = event.data;
 
+        switch (message.type) {
+          case 'progress':
+            setProgress(message.percent);
+            break;
+
+          case 'complete':
             setProgress(100);
             setIsProcessing(false);
-            resolve(json);
-          }, 10);
+            worker.terminate();
+            workerRef.current = null;
+            resolve(message.data);
+            break;
 
-        } catch (error: any) {
-          setError(error.message);
-          setIsProcessing(false);
-          reject(error);
+          case 'error':
+            setError(message.error);
+            setIsProcessing(false);
+            worker.terminate();
+            workerRef.current = null;
+            reject(new Error(message.error));
+            break;
         }
+      };
+
+      // Handle worker errors
+      worker.onerror = (event) => {
+        console.error('[useExcelWorker] Worker error:', event);
+        setError(event.message || 'Worker error');
+        setIsProcessing(false);
+        worker.terminate();
+        workerRef.current = null;
+        reject(new Error(event.message || 'Worker error'));
+      };
+
+      // Read file and send to worker
+      const reader = new FileReader();
+
+      reader.onload = (e) => {
+        const data = e.target?.result;
+        if (!data) {
+          setError('Failed to read file');
+          setIsProcessing(false);
+          reject(new Error('Failed to read file'));
+          return;
+        }
+
+        const isCSV = file.name.toLowerCase().endsWith('.csv');
+
+        // Send data to worker
+        worker.postMessage({
+          type: 'parse',
+          data: data,
+          fileType: isCSV ? 'csv' : 'excel'
+        });
       };
 
       reader.onerror = () => {
@@ -109,7 +167,70 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
       if (file.name.toLowerCase().endsWith('.csv')) {
         reader.readAsText(file);
       } else {
-        reader.readAsBinaryString(file);
+        reader.readAsArrayBuffer(file);
+      }
+    });
+  }, []);
+
+  /**
+   * Fallback: Parse on main thread with requestAnimationFrame yielding
+   * This is used when Web Worker fails to load
+   */
+  const fallbackParse = useCallback(async (file: File): Promise<RawRow[]> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+
+      reader.onload = async (e) => {
+        try {
+          const data = e.target?.result;
+          if (!data) {
+            throw new Error('Failed to read file');
+          }
+
+          if (!window.XLSX) {
+            throw new Error('XLSX library not loaded');
+          }
+
+          setProgress(20);
+
+          // Yield to let UI update
+          await new Promise(r => requestAnimationFrame(r));
+
+          const isCSV = file.name.toLowerCase().endsWith('.csv');
+          const workbook = window.XLSX.read(data, {
+            type: isCSV ? 'string' : 'array'
+          });
+
+          setProgress(50);
+          await new Promise(r => requestAnimationFrame(r));
+
+          const sheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[sheetName];
+
+          setProgress(70);
+          await new Promise(r => requestAnimationFrame(r));
+
+          const json = window.XLSX.utils.sheet_to_json(worksheet, {
+            raw: false,
+            defval: ''
+          }) as RawRow[];
+
+          setProgress(100);
+          resolve(json);
+        } catch (error: any) {
+          setError(error.message);
+          reject(error);
+        }
+      };
+
+      reader.onerror = () => {
+        reject(new Error('Failed to read file'));
+      };
+
+      if (file.name.toLowerCase().endsWith('.csv')) {
+        reader.readAsText(file);
+      } else {
+        reader.readAsArrayBuffer(file);
       }
     });
   }, []);
@@ -118,6 +239,11 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
    * Cancel current operation
    */
   const cancel = useCallback(() => {
+    isCancelledRef.current = true;
+    if (workerRef.current) {
+      workerRef.current.terminate();
+      workerRef.current = null;
+    }
     setIsProcessing(false);
     setProgress(0);
   }, []);

@@ -2,36 +2,40 @@
  * Excel Parser Web Worker
  *
  * Purpose: Parse large Excel/CSV files in background thread
- * - Prevents UI blocking
- * - Processes data in chunks
+ * - Prevents UI blocking (animation keeps spinning)
  * - Reports progress to main thread
  *
- * Supports: 1M+ rows without freezing the browser
+ * Note: Parsing happens in one go to ensure data integrity
+ * The chunking approach had bugs with header row handling
  */
 
-import { RawRow } from '../types';
+// Load XLSX library in worker context
+importScripts('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
 
-// Chunk size for processing (balance between memory and performance)
-const DEFAULT_CHUNK_SIZE = 10000;
+// XLSX is now available globally in worker
+declare const XLSX: any;
+
+// Type for raw data rows
+interface RawRow {
+  [key: string]: string | number | boolean | null | undefined;
+}
 
 interface WorkerMessage {
   type: 'parse';
   data: ArrayBuffer | string;
   fileType: 'excel' | 'csv';
-  chunkSize?: number;
 }
 
-interface ChunkMessage {
-  type: 'chunk';
-  data: RawRow[];
-  progress: number;
-  chunkIndex: number;
+interface ProgressMessage {
+  type: 'progress';
+  percent: number;
+  message: string;
 }
 
 interface CompleteMessage {
   type: 'complete';
+  data: RawRow[];
   totalRows: number;
-  totalChunks: number;
 }
 
 interface ErrorMessage {
@@ -39,71 +43,60 @@ interface ErrorMessage {
   error: string;
 }
 
-type WorkerResponse = ChunkMessage | CompleteMessage | ErrorMessage;
-
-// XLSX will be passed from main thread
-declare const XLSX: any;
+type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
 
 /**
- * Parse Excel/CSV in chunks and send back progressively
+ * Parse Excel/CSV file and send back complete data
  */
-const parseExcelInChunks = (
+const parseExcel = (
   data: ArrayBuffer | string,
-  fileType: 'excel' | 'csv',
-  chunkSize: number
+  fileType: 'excel' | 'csv'
 ): void => {
   try {
+    // Report: Starting parse
+    self.postMessage({
+      type: 'progress',
+      percent: 10,
+      message: 'Reading file...'
+    } as ProgressMessage);
+
     // Parse workbook
     const readType = fileType === 'excel' ? 'array' : 'string';
     const workbook = XLSX.read(data, { type: readType });
 
+    self.postMessage({
+      type: 'progress',
+      percent: 40,
+      message: 'Parsing spreadsheet...'
+    } as ProgressMessage);
+
     const sheetName = workbook.SheetNames[0];
     const worksheet = workbook.Sheets[sheetName];
 
-    // Get range to determine total rows
-    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1');
-    const totalRows = range.e.r - range.s.r; // Exclude header
-    const totalChunks = Math.ceil(totalRows / chunkSize);
+    self.postMessage({
+      type: 'progress',
+      percent: 60,
+      message: 'Converting to data...'
+    } as ProgressMessage);
 
-    // Parse in chunks
-    let processedRows = 0;
+    // Parse to JSON - no chunking to preserve data integrity
+    // defval: '' ensures empty cells become empty strings (not undefined/null)
+    const json = XLSX.utils.sheet_to_json(worksheet, {
+      raw: false,
+      defval: ''
+    }) as RawRow[];
 
-    for (let chunkIndex = 0; chunkIndex < totalChunks; chunkIndex++) {
-      const startRow = range.s.r + (chunkIndex * chunkSize);
-      const endRow = Math.min(startRow + chunkSize, range.e.r + 1);
+    self.postMessage({
+      type: 'progress',
+      percent: 90,
+      message: 'Finalizing...'
+    } as ProgressMessage);
 
-      // Create a sub-range for this chunk
-      const chunkRange = {
-        s: { r: startRow, c: range.s.c },
-        e: { r: endRow - 1, c: range.e.c }
-      };
-
-      // Parse only this chunk
-      const chunkData = XLSX.utils.sheet_to_json(worksheet, {
-        raw: false,
-        defval: '',
-        range: chunkRange
-      }) as RawRow[];
-
-      processedRows += chunkData.length;
-      const progress = Math.round((processedRows / totalRows) * 100);
-
-      // Send chunk to main thread
-      const message: ChunkMessage = {
-        type: 'chunk',
-        data: chunkData,
-        progress,
-        chunkIndex
-      };
-
-      self.postMessage(message);
-    }
-
-    // Send completion message
+    // Send completion with all data
     const completeMessage: CompleteMessage = {
       type: 'complete',
-      totalRows: processedRows,
-      totalChunks
+      data: json,
+      totalRows: json.length
     };
 
     self.postMessage(completeMessage);
@@ -122,12 +115,12 @@ const parseExcelInChunks = (
  * Worker message handler
  */
 self.onmessage = (event: MessageEvent<WorkerMessage>) => {
-  const { type, data, fileType, chunkSize = DEFAULT_CHUNK_SIZE } = event.data;
+  const { type, data, fileType } = event.data;
 
   if (type === 'parse') {
-    parseExcelInChunks(data, fileType, chunkSize);
+    parseExcel(data, fileType);
   }
 };
 
 // Export types for main thread usage
-export type { WorkerMessage, ChunkMessage, CompleteMessage, ErrorMessage, WorkerResponse };
+export type { WorkerMessage, ProgressMessage, CompleteMessage, ErrorMessage, WorkerResponse };
