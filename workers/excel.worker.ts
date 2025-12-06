@@ -9,7 +9,16 @@
  * Supports: 1M+ rows without freezing the browser
  */
 
-import { RawRow } from '../types';
+// Load XLSX library in worker context
+importScripts('https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js');
+
+// XLSX is now available globally in worker
+declare const XLSX: any;
+
+// Type for raw data rows
+interface RawRow {
+  [key: string]: string | number | boolean | null | undefined;
+}
 
 // Chunk size for processing (balance between memory and performance)
 const DEFAULT_CHUNK_SIZE = 10000;
@@ -40,9 +49,6 @@ interface ErrorMessage {
 }
 
 type WorkerResponse = ChunkMessage | CompleteMessage | ErrorMessage;
-
-// XLSX will be passed from main thread
-declare const XLSX: any;
 
 /**
  * Parse Excel/CSV in chunks and send back progressively
