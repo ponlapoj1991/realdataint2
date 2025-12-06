@@ -173,7 +173,7 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
   const meta = titles[kind];
 
   return (
-    <div className="p-8 max-w-7xl mx-auto space-y-6">
+    <div className="px-8 lg:px-10 py-8 space-y-6 h-full overflow-y-auto">
       <input
         ref={fileInputRef}
         type="file"
@@ -255,7 +255,7 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
         <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100 text-sm text-gray-500">
           <div className="flex items-center space-x-2">
             <span className="text-xs uppercase tracking-wide text-gray-400">Overview</span>
-            <span className="text-gray-300">•</span>
+            <span className="text-gray-300">&bull;</span>
             <span>{sources.length} table{sources.length === 1 ? '' : 's'}</span>
           </div>
           <div className="flex items-center space-x-2 text-xs text-gray-400">
@@ -269,7 +269,7 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
         </div>
 
         <div className="divide-y divide-gray-100">
-          <div className="grid grid-cols-[72px,2fr,1fr,1.2fr,1fr,1.6fr] px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 items-center">
+          <div className="grid grid-cols-[64px,2.2fr,1fr,1.2fr,1fr,2.4fr] px-6 py-3 text-xs font-semibold uppercase tracking-wide text-gray-500 items-center">
             <span className="text-center">No.</span>
             <span>Table name</span>
             <span className="text-center">Rows</span>
@@ -284,7 +284,7 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
             sources.map((source, idx) => {
               const isActive = normalizedProject.activeDataSourceId === source.id;
               return (
-                <div key={source.id} className="grid grid-cols-[72px,2fr,1fr,1.2fr,1fr,1.6fr] px-6 py-3 items-center text-sm hover:bg-gray-50 gap-2">
+                <div key={source.id} className="grid grid-cols-[64px,2.2fr,1fr,1.2fr,1fr,2.4fr] px-6 py-3 items-center text-sm hover:bg-gray-50 gap-3">
                   <span className="text-gray-500 text-center">{idx + 1}</span>
                   <div>
                     <div className="font-semibold text-gray-900">{source.name}</div>
@@ -304,9 +304,9 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
                       </button>
                     )}
                   </div>
-                  <div className="flex items-center justify-end flex-wrap gap-2">
+                  <div className="flex flex-col items-end gap-2 w-full max-w-sm ml-auto">
                     {kind === 'prepared' && (
-                      <>
+                      <div className="flex flex-wrap justify-end gap-2 w-full">
                         <button
                           onClick={() => handleDownload(source, 'excel')}
                           disabled={isLoading}
@@ -321,35 +321,37 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
                         >
                           <FileDown className="w-4 h-4 mr-1" /> CSV
                         </button>
-                      </>
+                      </div>
                     )}
-                    <button
-                      onClick={() => startUpload({ mode: 'append', sourceId: source.id })}
-                      disabled={isLoading}
-                      className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 text-xs hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Pencil className="w-4 h-4 mr-1" /> Append
-                    </button>
-                    <button
-                      onClick={() => startUpload({ mode: 'replace', sourceId: source.id })}
-                      disabled={isLoading}
-                      className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 text-xs hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <RefreshCcw className="w-4 h-4 mr-1" /> Replace
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const confirmed = confirm('Delete this table?');
-                        if (!confirmed) return;
-                        const updated = removeDataSource(normalizedProject, source.id);
-                        await persistProject(updated);
-                        showToast('Table deleted', `${source.name} has been removed.`, 'info');
-                      }}
-                      disabled={isLoading}
-                      className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-red-100 text-red-600 text-xs hover:border-red-200 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <Trash2 className="w-4 h-4 mr-1" /> Delete
-                    </button>
+                    <div className="flex flex-wrap justify-end gap-2 w-full">
+                      <button
+                        onClick={() => startUpload({ mode: 'append', sourceId: source.id })}
+                        disabled={isLoading}
+                        className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 text-xs hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Pencil className="w-4 h-4 mr-1" /> Append
+                      </button>
+                      <button
+                        onClick={() => startUpload({ mode: 'replace', sourceId: source.id })}
+                        disabled={isLoading}
+                        className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-gray-200 text-gray-700 text-xs hover:border-blue-300 hover:text-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <RefreshCcw className="w-4 h-4 mr-1" /> Replace
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const confirmed = confirm('Delete this table?');
+                          if (!confirmed) return;
+                          const updated = removeDataSource(normalizedProject, source.id);
+                          await persistProject(updated);
+                          showToast('Table deleted', `${source.name} has been removed.`, 'info');
+                        }}
+                        disabled={isLoading}
+                        className="inline-flex items-center px-2.5 py-1.5 rounded-md border border-red-100 text-red-600 text-xs hover:border-red-200 hover:text-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" /> Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -362,7 +364,7 @@ const DataIngest: React.FC<DataIngestProps> = ({ project, onUpdateProject, kind,
         <div className="fixed inset-0 bg-black/30 z-30 flex items-center justify-center">
           <div className="bg-white shadow-xl rounded-xl px-6 py-4 flex items-center space-x-3 text-gray-800">
             <Loader2 className="w-5 h-5 animate-spin text-blue-600" />
-            <span className="text-sm font-medium">Uploading…</span>
+            <span className="text-sm font-medium">Uploading&hellip;</span>
           </div>
         </div>
       )}
