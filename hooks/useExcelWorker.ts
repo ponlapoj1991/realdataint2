@@ -19,17 +19,16 @@ interface UseExcelWorkerResult {
   cancel: () => void;
 }
 
-interface ChunkMessage {
-  type: 'chunk';
-  data: RawRow[];
-  progress: number;
-  chunkIndex: number;
+interface ProgressMessage {
+  type: 'progress';
+  percent: number;
+  message: string;
 }
 
 interface CompleteMessage {
   type: 'complete';
+  data: RawRow[];
   totalRows: number;
-  totalChunks: number;
 }
 
 interface ErrorMessage {
@@ -37,7 +36,7 @@ interface ErrorMessage {
   error: string;
 }
 
-type WorkerResponse = ChunkMessage | CompleteMessage | ErrorMessage;
+type WorkerResponse = ProgressMessage | CompleteMessage | ErrorMessage;
 
 export const useExcelWorker = (): UseExcelWorkerResult => {
   const [isProcessing, setIsProcessing] = useState(false);
@@ -82,16 +81,19 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
       } catch (workerError) {
         console.warn('[useExcelWorker] Worker creation failed, falling back to main thread:', workerError);
         // Fallback to main thread processing
-        return fallbackParse(file)
-          .then(resolve)
-          .catch(reject)
-          .finally(() => {
+        fallbackParse(file)
+          .then((data) => {
             setIsProcessing(false);
+            resolve(data);
+          })
+          .catch((err) => {
+            setIsProcessing(false);
+            reject(err);
           });
+        return;
       }
 
       const worker = workerRef.current;
-      const allData: RawRow[] = [];
 
       // Handle messages from worker
       worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
@@ -100,10 +102,8 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
         const message = event.data;
 
         switch (message.type) {
-          case 'chunk':
-            // Accumulate chunk data
-            allData.push(...message.data);
-            setProgress(message.progress);
+          case 'progress':
+            setProgress(message.percent);
             break;
 
           case 'complete':
@@ -111,7 +111,7 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
             setIsProcessing(false);
             worker.terminate();
             workerRef.current = null;
-            resolve(allData);
+            resolve(message.data);
             break;
 
           case 'error':
@@ -152,8 +152,7 @@ export const useExcelWorker = (): UseExcelWorkerResult => {
         worker.postMessage({
           type: 'parse',
           data: data,
-          fileType: isCSV ? 'csv' : 'excel',
-          chunkSize: 5000 // Smaller chunks for better progress updates
+          fileType: isCSV ? 'csv' : 'excel'
         });
       };
 
